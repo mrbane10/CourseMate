@@ -8,8 +8,6 @@ import heapq
 from groq import Groq
 
 
-
-# Embedding cache management
 def generate_or_load_embeddings(data, model, cache_file='embeddings_cache.npz'):
     """
     Generate or load embeddings for the dataset.
@@ -22,27 +20,27 @@ def generate_or_load_embeddings(data, model, cache_file='embeddings_cache.npz'):
     Returns:
         tuple: (topic_embeddings, content_embeddings)
     """
-    # Check if cache exists
+    # checking if the cache exists or not
     if os.path.exists(cache_file):
         try:
-            # Load existing cache
+            # load the existing cache
             cached_data = np.load(cache_file, allow_pickle=True)
             cached_topic_embeddings = cached_data['topic_embeddings']
             cached_content_embeddings = cached_data['content_embeddings']
 
-            # Verify cache matches current data length
+            # verifying if cache matches current data length
             if len(cached_topic_embeddings) == len(data):
                 print("Loading embeddings from cache...")
                 return cached_topic_embeddings, cached_content_embeddings
         except Exception as e:
             print(f"Error loading cache: {e}")
 
-    # Generate embeddings if no valid cache exists
+    # generate embeddings if no valid cache exists
     print("Generating new embeddings...")
     topic_embeddings = model.encode([item['topic'] for item in data], convert_to_tensor=False)
     content_embeddings = model.encode([item['content'] for item in data], convert_to_tensor=False)
 
-    # Save to cache
+    # save to cache
     try:
         np.savez_compressed(cache_file,
                             topic_embeddings=topic_embeddings,
@@ -53,34 +51,32 @@ def generate_or_load_embeddings(data, model, cache_file='embeddings_cache.npz'):
     return topic_embeddings, content_embeddings
 
 
-# Retrieval pipeline
+# the retrieval pipeline for extracting relevant context from data
 def retrieve(query, data, topic_embeddings, content_embeddings, model, top_n=5):
     """
     Retrieve most relevant contexts based on query.
     """
-    # Ensure query embedding is on the same device and converted correctly
+    # ensuring that query embedding is on the same device and converted correctly
     query_embedding = model.encode(query, convert_to_tensor=True)
-
-    # Explicitly move query_embedding to CPU if needed
     query_embedding = query_embedding.cpu()
 
-    # Calculate similarities for topics and content
+    # calculating the similarity scores for topics and content
     similarities = []
     for idx, (topic_emb, content_emb) in enumerate(zip(topic_embeddings, content_embeddings)):
-        # Convert to tensor and ensure CPU placement
+        # convert to tensor and ensure CPU placement
         topic_tensor = torch.tensor(topic_emb).cpu()
         content_tensor = torch.tensor(content_emb).cpu()
 
-        # Calculate similarities
+        # calculating similarities
         topic_similarity = util.cos_sim(query_embedding, topic_tensor).item()
         content_similarity = util.cos_sim(query_embedding, content_tensor).item()
 
-        # Combined similarity with higher weight on content
+        # combined similarity scores with higher weight to content
         combined_similarity = (0.3 * topic_similarity) + (0.7 * content_similarity)
 
         similarities.append((combined_similarity, idx))
 
-    # Select top N results
+    # selecting the top n results/matches
     top_results = heapq.nlargest(top_n, similarities, key=lambda x: x[0])
 
     # Prepare results
@@ -92,30 +88,30 @@ def retrieve(query, data, topic_embeddings, content_embeddings, model, top_n=5):
     return results, query_embedding
 
 
-# Function to calculate context relevance
+# function to calculate whether the context is relevant or not
 def is_context_relevant(query, result, query_embedding, topic_embedding, content_embedding, threshold=0.4):
     """
     Determine if the retrieved context is relevant to the query.
     """
-    # Ensure CPU placement for tensors
+    # ensuring CPU placement for tensors
     query_embedding = query_embedding.cpu()
     topic_tensor = torch.tensor(topic_embedding).cpu()
     content_tensor = torch.tensor(content_embedding).cpu()
 
-    # Calculate similarities
+    # calculating similarities
     topic_similarity = util.cos_sim(query_embedding, topic_tensor).item()
     content_similarity = util.cos_sim(query_embedding, content_tensor).item()
 
-    # Combined similarity with higher weight on content
+    # combined similarity with higher weight on content
     combined_similarity = (0.3 * topic_similarity) + (0.7 * content_similarity)
 
     return combined_similarity > threshold
 
 
-# Prepare conversation history with a token limit
+# preparing the conversation history with a token limit for better conversational flow
 def prepare_conversation_history(messages, max_tokens=4000):
     """
-    Prepare conversation history while respecting token limit.
+    Preparing conversation history while respecting token limit for computational efficiency.
 
     Args:
         messages (list): List of message dictionaries
@@ -127,15 +123,15 @@ def prepare_conversation_history(messages, max_tokens=4000):
     history = []
     current_tokens = 0
 
-    # Iterate in reverse to keep the most recent messages
+    # iterating in reverse to keep the most recent messages in context
     for msg in reversed(messages):
-        # Estimate token count (rough approximation)
+        # estimate token count (rough approximation)
         msg_tokens = len(msg['content'].split())
 
         if current_tokens + msg_tokens > max_tokens:
             break
 
-        # Prepend to maintain chronological order
+        # prepend to maintain chronological order
         history.append({"role": msg['role'], "content": msg['content']})
         current_tokens += msg_tokens
 
@@ -162,14 +158,14 @@ def main():
     # Sentence Transformer model and embeddings
     model = SentenceTransformer('sentence-transformers/all-mpnet-base-v2')
 
-    # Load data from JSON file
+    # loading the preprocessed data from our JSON file
     with open("data.json", "r") as f:
         data = json.load(f)
 
-    # Generate/Load embeddings
+    # generating/loading embeddings
     topic_embeddings, content_embeddings = generate_or_load_embeddings(data, model)
 
-    # Initialize Groq client
+    # initialising Groq client
     client = Groq(api_key=os.getenv("groq_key"))
 
     st.title("Hydraulic Engineering Assistant")
@@ -179,14 +175,14 @@ def main():
 
     # Dropdown for model selection
     model_options = [
+        "llama-3.1-70b-versatile",
         "llama3-70b-8192",
         "gemma-7b-it",
         "gemma2-9b-it",
         "llama-3.1-8b-instant",
         "mixtral-8x7b-32768",
-        "llama-3.1-70b-versatile",
     ]
-    selected_model = st.sidebar.selectbox("Select Model", model_options)
+    selected_model = st.sidebar.selectbox("Select Model", model_options)  #for selection among multiple models 
     st.session_state.groq_model = selected_model
 
     st.sidebar.write(f"Current Model: **{st.session_state.groq_model}**")
@@ -223,7 +219,7 @@ def main():
             ):
                 relevant_contexts.append((similarity, result))
 
-            # Stop after two relevant contexts
+            # Stopping after two relevant contexts
             if len(relevant_contexts) == 2:
                 break
 
@@ -248,25 +244,25 @@ def main():
             f"{enriched_context if use_context else 'Provide a general response to the query without assuming any specific context.'}"
         )
 
-        # Generate response from Groq
+        # Generating response from Groq
         with st.chat_message("assistant"):
             response_placeholder = st.empty()
             full_response = ""
 
             try:
-                # Prepare conversation history
+                # conversation history
                 conversation_history = prepare_conversation_history(
                     st.session_state.messages[:-1]  # Exclude the current message
                 )
 
-                # Construct messages with history, system prompt, and current query
+                # messages with history, system prompt, and current query
                 messages = [
                                {"role": "system", "content": system_prompt}
                            ] + conversation_history + [
                                {"role": "user", "content": prompt}
                            ]
 
-                # Fetch response from Groq with streaming
+                #response from Groq with streaming
                 for chunk in client.chat.completions.create(
                         model=st.session_state.groq_model,
                         messages=messages,
@@ -285,6 +281,6 @@ def main():
             st.session_state.messages.append({"role": "assistant", "content": full_response})
 
 
-# Run the Streamlit app
+# running the Streamlit app
 if __name__ == "__main__":
     main()
