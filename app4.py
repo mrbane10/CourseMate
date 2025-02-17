@@ -175,7 +175,7 @@ def main():
 
     # Dropdown for model selection
     model_options = [
-        "llama-3.1-70b-versatile",
+        "llama-3.3-70b-versatile",
         "llama3-70b-8192",
         "gemma-7b-it",
         "gemma2-9b-it",
